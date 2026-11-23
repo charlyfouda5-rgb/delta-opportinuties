@@ -34,39 +34,12 @@ async function init() {
   await q(`create table if not exists progress(user_id int references users(id) on delete cascade,module_id int references modules(id) on delete cascade,primary key(user_id,module_id))`);
   await q(`create table if not exists assessments(id serial primary key,user_id int not null references users(id) on delete cascade,skill text not null,score int not null,level int not null,correct int not null,total int not null,created_at timestamptz default now())`);
   await q(`create table if not exists certificates(id serial primary key,user_id int not null references users(id) on delete cascade,skill text not null,score int not null,level int not null,code text unique not null,issued_at timestamptz default now())`);
-  for (const t of ['users', 'opportunities', 'modules', 'questions']) await q(`alter table ${t} add column if not exists demo boolean not null default false`);
   await q(`create index if not exists opp_idx on opportunities(status,type,country)`);
   const em = (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase(), pw = process.env.SUPER_ADMIN_PASSWORD || '';
   if (!em || pw.length < 8) throw E(500, 'Définissez SUPER_ADMIN_EMAIL et SUPER_ADMIN_PASSWORD (8 caractères min.) dans Vercel');
   await q(`insert into users(email,name,role,pw,verified) values($1,'Super administrateur','super',$2,true) on conflict(email) do nothing`, [em, hash(pw)]);
 }
 
-const DEMO_PW = 'Demo2026!';
-const DEMO_OPPS = [
-  { type: 'emploi', title: '[DÉMO] Logisticien', city: 'Montréal', country: 'Canada', domain: 'Logistique', mode: 'presentiel', pay: 'Annonce fictive', cond: 'Annonce fictive de démonstration : autorisation de travail requise.', skills: [{ n: 'Diplôme : Logistique', k: 'Logistique', l: 1 }, { n: 'Excel', l: 3 }, { n: 'Anglais professionnel', l: 3 }, { n: 'Gestion des stocks', l: 2 }] },
-  { type: 'stage', title: '[DÉMO] Stage en gestion des stocks', city: 'Douala', country: 'Cameroun', domain: 'Logistique', mode: 'hybride', pay: 'Annonce fictive', cond: 'Annonce fictive de démonstration.', skills: [{ n: 'Excel', l: 2 }, { n: 'Gestion des stocks', l: 1 }] },
-  { type: 'bourse', title: '[DÉMO] Bourse d’études en logistique internationale', city: 'Lyon', country: 'France', domain: 'Études', mode: 'presentiel', pay: 'Financement fictif', cond: 'Annonce fictive de démonstration.', skills: [{ n: 'Diplôme : Licence', k: 'Licence', l: 1 }, { n: 'Anglais', l: 2 }] },
-  { type: 'formation', title: '[DÉMO] Formation Excel avancé', city: '', country: 'En ligne', domain: 'Bureautique', mode: 'distance', pay: 'Annonce fictive', cond: 'Annonce fictive de démonstration.', skills: [] }
-];
-const DEMO_MODS = [
-  ['Excel', 2, 'cours', 'Les fonctions SI et RECHERCHEV', 'La fonction SI teste une condition : =SI(B2>=10;"Admis";"Refusé") renvoie le premier texte si la condition est vraie, le second sinon.\n\nLa fonction RECHERCHEV cherche une valeur dans la première colonne d’un tableau et renvoie la valeur d’une autre colonne : =RECHERCHEV(A2;Tableau!A:C;3;FAUX). Le dernier argument FAUX demande une correspondance exacte.\n\nPensez à verrouiller les plages avec le signe $ (par exemple $A$2:$C$100) avant de recopier la formule vers le bas.', ''],
-  ['Excel', 3, 'exercice', 'Retrouver un prix avec RECHERCHEV', 'La feuille Prix contient les références en colonne A et les prix en colonne C (lignes 2 à 100). Dans la feuille Commandes, la colonne A contient une référence. Écrivez la formule qui affiche le prix correspondant, avec correspondance exacte, recopiable vers le bas.', '=RECHERCHEV(A2;Prix!$A$2:$C$100;3;FAUX) — les $ verrouillent la plage, 3 désigne la troisième colonne (le prix), FAUX impose une correspondance exacte.'],
-  ['Gestion des stocks', 1, 'cours', 'Stock de sécurité et méthode FIFO', 'Le stock de sécurité est une quantité supplémentaire conservée pour absorber les aléas de la demande ou des délais de livraison.\n\nFIFO (premier entré, premier sorti) : les articles les plus anciens sortent en premier ; indispensable pour les produits périssables. LIFO est l’inverse : dernier entré, premier sorti.', ''],
-  ['Gestion des stocks', 2, 'cours', 'Analyse ABC, rotation et point de commande', 'Analyse ABC : on classe les articles par valeur. Les articles A sont peu nombreux mais représentent la plus grande part de la valeur ; les articles C sont nombreux mais pèsent peu.\n\nRotation des stocks = consommation (ou coût des ventes) annuelle ÷ stock moyen.\n\nPoint de commande = demande moyenne pendant le délai de réapprovisionnement + stock de sécurité.', '']
-];
-const DEMO_QS = [
-  ['Excel', 1, 'Quelle formule additionne les cellules de A1 à A5 ?', ['=A1+A5', '=SOMME(A1:A5)', '=TOTAL(A1;A5)', '=ADDITION(A1:A5)'], 1],
-  ['Excel', 1, 'Que calcule =MOYENNE(B2:B10) ?', ['La somme des cellules', 'Le nombre de cellules', 'La moyenne des valeurs', 'La plus grande valeur'], 2],
-  ['Excel', 2, 'Quelle fonction renvoie un résultat selon qu’une condition est vraie ou fausse ?', ['RECHERCHEV', 'SI', 'ARRONDI', 'NB'], 1],
-  ['Excel', 2, 'Que signifie le signe $ dans $A$1 ?', ['La cellule contient une devise', 'La cellule est protégée', 'La référence est verrouillée (absolue) lors de la recopie', 'La formule est masquée'], 2],
-  ['Excel', 3, 'Quelle fonction cherche une valeur dans la première colonne d’un tableau et renvoie la valeur d’une autre colonne ?', ['SOMME.SI', 'NB.SI', 'CONCATENER', 'RECHERCHEV'], 3],
-  ['Excel', 3, 'Dans RECHERCHEV, quel dernier argument demande une correspondance exacte ?', ['FAUX (ou 0)', 'VRAI (ou 1)', 'SI', 'Aucun : c’est automatique'], 0],
-  ['Gestion des stocks', 1, 'Que désigne le stock de sécurité ?', ['Le stock détruit chaque mois', 'La quantité conservée en plus pour couvrir les aléas de demande ou de délai', 'Le stock déjà vendu', 'Le stock livré au client'], 1],
-  ['Gestion des stocks', 1, 'Quelle méthode sort en premier les articles entrés en premier ?', ['LIFO', 'ABC', 'FIFO', 'PERT'], 2],
-  ['Gestion des stocks', 2, 'Dans l’analyse ABC, que représentent les articles de classe A ?', ['Beaucoup de références, peu de valeur', 'Les produits périmés', 'Les articles sans mouvement', 'Peu de références mais une grande part de la valeur'], 3],
-  ['Gestion des stocks', 2, 'Comment calcule-t-on la rotation des stocks ?', ['Consommation annuelle ÷ stock moyen', 'Stock final ÷ prix', 'Stock initial − stock final', 'Ventes ÷ nombre de fournisseurs'], 0],
-  ['Gestion des stocks', 3, 'Le point de commande correspond à :', ['Le stock maximal de l’entrepôt', 'La demande moyenne pendant le délai de réapprovisionnement + le stock de sécurité', 'Le stock après inventaire', 'La capacité de transport'], 1]
-];
 const pub = u => ({ id: u.id, email: u.email, phone: u.phone || null, name: u.name, role: u.role, status: u.status, org_name: u.org_name, country: u.country, verified: u.verified });
 const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
 
@@ -248,20 +221,6 @@ async function route(a, b, me) {
     return { score, level, correct: ok, total: qs.length, cert };
   }
 
-  if (a === 'demoStatus') { need('super'); return { loaded: (await q(`select 1 from users where demo limit 1`)).length > 0 }; }
-  if (a === 'demoLoad') {
-    need('super'); if ((await q(`select 1 from users where demo limit 1`)).length) throw E(409, 'Les données de démonstration sont déjà chargées');
-    const pw = hash(DEMO_PW);
-    const org = (await q(`insert into users(email,name,role,pw,status,org_name,country,demo) values('org.demo@delta-opportunities.test','Jean Mballa (démo)','org',$1,'active','Logistique Express SARL (démo)','Cameroun',true) returning id`, [pw]))[0].id;
-    const cand = (await q(`insert into users(email,name,role,pw,status,country,demo) values('candidat.demo@delta-opportunities.test','Marie Nkou (démo)','candidate',$1,'active','Cameroun',true) returning id`, [pw]))[0].id;
-    await q(`insert into profiles(user_id,doc) values($1,$2)`, [cand, JSON.stringify({ edu: [{ t: 'Licence en logistique', s: 'Université fictive', y: '2024' }], exp: [{ t: 'Assistante logistique', o: 'Entreprise fictive', d: '2024-2025' }], lang: [{ n: 'Anglais', l: 2 }, { n: 'Français', l: 4 }], soft: ['Travail en équipe', 'Rigueur'] })]);
-    await q(`insert into skills(user_id,name,level) values($1,'Excel',2),($1,'Gestion des stocks',1)`, [cand]);
-    for (const o of DEMO_OPPS) await q(`insert into opportunities(org_id,type,title,description,country,city,domain,mode,skills,conditions,deadline,pay,demo) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,current_date+365,$11,true)`, [org, o.type, o.title, 'ANNONCE FICTIVE DE DÉMONSTRATION — ' + o.title.replace('[DÉMO] ', '') + '. Cette annonce n’existe pas : elle sert uniquement à essayer la plateforme.', o.country, o.city, o.domain, o.mode, JSON.stringify(o.skills), o.cond, o.pay]);
-    for (const m of DEMO_MODS) await q(`insert into modules(skill,level,kind,title,body,sol,demo) values($1,$2,$3,$4,$5,$6,true)`, m);
-    for (const x of DEMO_QS) await q(`insert into questions(skill,level,q,choices,answer,demo) values($1,$2,$3,$4,$5,true)`, [x[0], x[1], x[2], JSON.stringify(x[3]), x[4]]);
-    return { ok: true };
-  }
-  if (a === 'demoClear') { need('super'); await q(`delete from opportunities where demo`); await q(`delete from modules where demo`); await q(`delete from questions where demo`); await q(`delete from users where demo`); return { ok: true }; }
   if (a === 'contentList') { need('super'); return { modules: await q(`select * from modules order by lower(skill),level,id`), questions: await q(`select * from questions order by lower(skill),level,id`) }; }
   if (a === 'modSave') {
     need('super'); const url = str(b.url, 500), lv = Math.min(4, Math.max(1, parseInt(b.level, 10) || 1));
